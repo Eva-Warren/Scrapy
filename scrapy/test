@@ -1,0 +1,4 @@
+=IF(AND(ISNUMBER(VALUE(LEFT(D2  , 5))), LEN(LEFT(D2 , 5))=5), "", TRIM(LEFT(D2 , FIND(",", D2 )-1)))
+=IF(AND(ISNUMBER(VALUE(LEFT(H2, 5))), ISERROR(FIND(" ", H2, 6))=FALSE), RIGHT(H2, LEN(H2)-6), H2)
+
+=IF(A1="Lundi", IF(OR(A1="Lun. – Sam."), "7:30 – 19:00", IF(OR(A1="Tous les jours"), "8:00 – 19:00", IF(OR(A1="Lun. – Sam."), "8:00 – 20:00")))), 
