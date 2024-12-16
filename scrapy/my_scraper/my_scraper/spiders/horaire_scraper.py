@@ -58,12 +58,8 @@ class HoraireScraper(scrapy.Spider):
         # Extraire le HTML après le rendu avec Selenium
         sel = Selector(text=driver.page_source)
 
-        # Essayer d'extraire le titre avec la première classe
-        title = sel.xpath("//div[@class='DoxwDb']//div[@class='PZPZlf ssJ7i B5dxMb']/text()").get()
-
-        # Si le titre n'est pas trouvé, essayer d'extraire à partir de la seconde classe
-        if not title:
-            title = sel.xpath("//div[@class='PZPZlf ssJ7i xgAzOe']/text()").get()
+        # Essayer d'extraire le titre avec les classes PZPZlf et ssJ7i sans se soucier de la troisième classe dynamique
+        title = sel.xpath("//div[contains(@class, 'PZPZlf') and contains(@class, 'ssJ7i')]/text()").get()
 
         # Extraire l'adresse depuis l'élément ciblé
         address = sel.xpath("//div[@class='zloOqf PZPZlf']//span[@class='LrzXr']/text()").get()
@@ -75,15 +71,7 @@ class HoraireScraper(scrapy.Spider):
         link = sel.xpath("//a[@class='n1obkb mI8Pwc']/@href").get()
 
         # Essayer d'extraire les horaires d'ouverture du premier tableau
-        hours = {
-            'lundi': None,
-            'mardi': None,
-            'mercredi': None,
-            'jeudi': None,
-            'vendredi': None,
-            'samedi': None,
-            'dimanche': None,
-        }
+        hours = {}
         
         for row in sel.xpath("//tbody/tr"):
             day = row.xpath("td[1]/text()").get()  # Le premier <td> contient le jour
@@ -101,6 +89,20 @@ class HoraireScraper(scrapy.Spider):
                 if day and time_range:
                     hours[day.strip().lower()] = time_range.strip()
 
+        # Extraire la note 
+        rating = sel.xpath("//span[@class='Aq14fc']/text()").get()
+
+        # Extraire le texte des avis Google et convertir en entier
+        reviews_text = sel.xpath("//a[@data-async-trigger='reviewDialog']/span/text()").get()
+        
+        reviews = None  # Initialiser reviews à None par défaut
+        if reviews_text:
+            # Extraire uniquement les chiffres de la chaîne et convertir en entier
+            reviews = int(''.join(filter(str.isdigit, reviews_text)))
+
+        owners_count_elements = sel.xpath("//div[contains(@class, 'PhaUTe')]").get()
+    
+        # owners_count = sum(1 for element in owners_count_elements if '(owner)' in element.get())
         # Fermer le navigateur Selenium
         driver.quit()
 
@@ -110,5 +112,8 @@ class HoraireScraper(scrapy.Spider):
             'phone': phone.strip() if phone else None,
             'link': link.strip() if link else None,
             'url': response.url,
-            'hours': hours  # Ajouter les horaires d'ouverture au résultat sous la clé 'hours'
+            'hours': hours,  # Ajouter les horaires d'ouverture au résultat sous la clé 'hours'
+            'rating': rating.strip() if rating else None,
+            'owners_count': owners_count_elements.strip() if owners_count_elements else None,
+            'reviews': reviews,  # Ajouter les avis convertis au résultat
         }

@@ -16,7 +16,7 @@ USER_AGENTS = [
 ]
 
 class GoogleScraper(scrapy.Spider):
-    name = 'google_scraper'
+    name = 'google_scraper'  # Nom unique pour le spider
     allowed_domains = ['google.com']
 
     custom_settings = {
@@ -24,10 +24,10 @@ class GoogleScraper(scrapy.Spider):
         'LOG_LEVEL': 'INFO',
         'CONCURRENT_REQUESTS_PER_DOMAIN': 5,
         'RETRY_TIMES': 5,
-        'DOWNLOAD_DELAY': 0,  # Pas de délai pour maximiser la vitesse
     }
 
     def start_requests(self):
+        # Lire les URLs depuis le fichier CSV
         with open('urls.csv', mode='r', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
@@ -58,19 +58,53 @@ class GoogleScraper(scrapy.Spider):
         # Extraire le HTML après le rendu avec Selenium
         sel = Selector(text=driver.page_source)
 
-        # Extraire les données souhaitées
-        title = sel.xpath("//div[@class='DoxwDb']//div[@class='PZPZlf ssJ7i B5dxMb']/text()").get()
+        # Extraction du titre principal avec plusieurs sources possibles
+        title = sel.xpath("//div[contains(@class, 'PZPZlf') and contains(@class, 'ssJ7i')]/text()").get()
+        title_h2 = sel.xpath("//h2[@class='qrShPb pXs6bb PZPZlf q8U8x aTI8gc hNKfZe']/span/text()").get()
+        new_title = sel.xpath("//div[@class='PZPZlf ssJ7i B5dxMb' and @data-attrid='title']/text()").get()
+        
+        final_title = title or title_h2 or new_title  # Combine titles
+
+        # Extraction de l'adresse
         address = sel.xpath("//div[@class='zloOqf PZPZlf']//span[@class='LrzXr']/text()").get()
-        phone = sel.xpath("//a[@data-dtype='d3ph']//span/text()").get()
-        link = sel.xpath("//a[@class='n1obkb mI8Pwc']/@href").get()
+        address_alt = sel.xpath("//div[contains(@class, 'zloOqf PZPZlf') and contains(@data-dtype, 'd3ifr')]//span[@class='LrzXr']/text()").get()
+        final_address = address or address_alt  # Combine addresses
+
+        # Extraction du numéro de téléphone
+        phone_number = sel.xpath("//div[@data-local-attribute='d3ph']//span[@aria-label]/text()").get()
+
+        # Extraction des horaires d'ouverture
+        hours = {}
+        
+        # Essayer d'extraire les horaires d'ouverture du premier tableau
+        for row in sel.xpath("//tbody/tr"):
+            day = row.xpath("td[1]/text()").get()  # Le premier <td> contient le jour
+            time_range = row.xpath("td[2]/text()").get()  # Le second <td> contient l'horaire
+            
+            if day and time_range:
+                hours[day.strip().lower()] = time_range.strip()
+
+        # Si aucun horaire n'a été trouvé, essayer d'extraire à partir du second tableau sans classe dans <td>
+        if not hours:  # If no hours were found in the first extraction
+            for row in sel.xpath("//div[@class='b2JWxc']//table/tbody/tr"):
+                day = row.xpath("td[1]/text()").get()  # Le premier <td> contient le jour sans classe
+                time_range = row.xpath("td[2]/text()").get()  # Le second <td> contient l'horaire sans classe
+                
+                if day and time_range:
+                    hours[day.strip().lower()] = time_range.strip()
+
+        # Extraction de l'URL du site web
+        url = sel.xpath("//a[@class='n1obkb mI8Pwc']/@href").get()
 
         # Fermer le navigateur Selenium
         driver.quit()
 
         yield {
-            'title': title.strip() if title else None,
-            'address': address.strip() if address else None,
-            'phone': phone.strip() if phone else None,
-            'link': link.strip() if link else None,
-            'url': response.url
+            'title': final_title.strip() if final_title else None,
+            'address': final_address.strip() if final_address else None,
+            'phone': phone_number.strip() if phone_number else None,  # Ajouter le numéro de téléphone au résultat
+            'url': url.strip() if url else None, # Inclure l'URL extraite dans le résultat
+            'source_url': response.url,  # URL source pour référence
+            'hours': hours,  # Ajouter les horaires d'ouverture au résultat sous la clé 'hours'
+            # You can add more fields here as needed...
         }
