@@ -21,3 +21,14 @@
      </div> 
     </div> 
    </header>
+   =IF(REGEXMATCH(input!B38, "\b\d+[A-Za-z0-9\/]*\b"), 
+   IF(OR(REGEXMATCH(LEFT(input!B38,FIND(REGEXEXTRACT(input!B38, "\b\d+[A-Za-z0-9\/]*\b"),input!B38)-1), "\b[a-zA-Z]+"), 
+          REGEXMATCH(LEFT(input!B38,FIND(REGEXEXTRACT(input!B38, "\b\d+[A-Za-z0-9\/]*\b"),input!B38)-1), "\b[^\d]+")), 
+       REGEXEXTRACT(input!B38, "\b\d+[A-Za-z0-9\/]*\b"), 
+       MID(input!B38, FIND(REGEXEXTRACT(input!B38, "\b\d+[A-Za-z0-9\/]*\b"),input!B38)+LEN(REGEXEXTRACT(input!B38, "\b\d+[A-Za-z0-9\/]*\b"))+1, LEN(input!B38))
+   ), 
+   IF(REGEXMATCH(input!B38, ",\s*\d{4,5}\b"), 
+       MID(input!B38, FIND(",", input!B38)+1, FIND("\b\d{4,5}\b", input!B38)-FIND(",", input!B38)-1), 
+       MID(input!B38, FIND(",", input!B38)+1, LEN(input!B38)-FIND(",", input!B38))
+   )
+)

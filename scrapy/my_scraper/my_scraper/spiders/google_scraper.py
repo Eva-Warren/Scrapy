@@ -32,12 +32,14 @@ class GoogleScraper(scrapy.Spider):
             reader = csv.DictReader(csvfile)
             for row in reader:
                 url = row['url'].strip()  # Obtenir l'URL et enlever les espaces
+                id_value = row['id']  # Obtenir l'ID depuis le fichier CSV
                 if url:  # Vérifier que l'URL n'est pas vide
                     yield scrapy.Request(
                         url,
                         callback=self.parse,
                         headers={"User-Agent": random.choice(USER_AGENTS)},
-                        dont_filter=True
+                        dont_filter=True,
+                        meta={'id': id_value}  # Passer l'ID dans les meta données de la requête
                     )
 
     def parse(self, response):
@@ -59,30 +61,32 @@ class GoogleScraper(scrapy.Spider):
         sel = Selector(text=driver.page_source)
 
         # Extraction du titre principal avec plusieurs sources possibles
-        title = sel.xpath("//div[contains(@class, 'PZPZlf') and contains(@class, 'ssJ7i')]/text()").get()
-        title_h2 = sel.xpath("//h2[@class='qrShPb pXs6bb PZPZlf q8U8x aTI8gc hNKfZe']/span/text()").get()
+        title = sel.xpath("//div[@data-attrid='title']/text()").get()
+        title_h2 = sel.xpath("//h2[@data-attrid='title']/span/text()").get()
+        ntt = sel.xpath("//div[@class='PZPZlf ssJ7i xgAzOe' and @data-attrid='title']/text()").get()
         new_title = sel.xpath("//div[@class='PZPZlf ssJ7i B5dxMb' and @data-attrid='title']/text()").get()
         
-        final_title = title or title_h2 or new_title  # Combine titles
+        final_title = title or title_h2 or new_title or ntt  # Combine titles
 
         # Extraction de l'adresse
-        address = sel.xpath("//div[@class='zloOqf PZPZlf']//span[@class='LrzXr']/text()").get()
-        address_alt = sel.xpath("//div[contains(@class, 'zloOqf PZPZlf') and contains(@data-dtype, 'd3ifr')]//span[@class='LrzXr']/text()").get()
+        address = sel.xpath("//div[@data-local-attribute='d3adr']//span[@class='LrzXr']/text()").get()
+        address_alt = sel.xpath("//div[@data-local-attribute='d3adr']//span[@class='LrzXr']/text()").get()
         final_address = address or address_alt  # Combine addresses
 
-        # Extraction du numéro de téléphone
-        phone_number = sel.xpath("//div[@data-local-attribute='d3ph']//span[@aria-label]/text()").get()
-
+        phone_number = sel.xpath("//div[@data-local-attribute='d3ph']//span[@aria-label]//text()").get()
+        
         # Extraction des horaires d'ouverture
         hours = {}
         
-        # Essayer d'extraire les horaires d'ouverture du premier tableau
         for row in sel.xpath("//tbody/tr"):
             day = row.xpath("td[1]/text()").get()  # Le premier <td> contient le jour
             time_range = row.xpath("td[2]/text()").get()  # Le second <td> contient l'horaire
             
             if day and time_range:
-                hours[day.strip().lower()] = time_range.strip()
+                if "Ouvert 24h/24" in time_range:
+                    hours[day.strip().lower()] = "00:00–24:00"  # Changer en format souhaité pour 24 heures
+                else:
+                    hours[day.strip().lower()] = time_range.strip()
 
         # Si aucun horaire n'a été trouvé, essayer d'extraire à partir du second tableau sans classe dans <td>
         if not hours:  # If no hours were found in the first extraction
@@ -91,10 +95,24 @@ class GoogleScraper(scrapy.Spider):
                 time_range = row.xpath("td[2]/text()").get()  # Le second <td> contient l'horaire sans classe
                 
                 if day and time_range:
-                    hours[day.strip().lower()] = time_range.strip()
+                    if "Ouvert 24h/24" in time_range:
+                        hours[day.strip().lower()] = "00:00–24:00"  # Changer en format souhaité pour 24 heures
+                    else:
+                        hours[day.strip().lower()] = time_range.strip()
+
+        if not hours:  # If no hours were found in the first extraction
+            for row in sel.xpath("//table[@class='WgFkxc']/tbody/tr"):
+                day = row.xpath("td[1]/text()").get()  # Le premier <td> contient le jour sans classe
+                time_range = row.xpath("td[2]/text()").get()  # Le second <td> contient l'horaire sans classe
+                
+                if day and time_range:
+                    if "Ouvert 24h/24" in time_range:
+                        hours[day.strip().lower()] = "00:00–24:00"  # Changer en format souhaité pour 24 heures
+                    else:
+                        hours[day.strip().lower()] = time_range.strip()
 
         # Extraction de l'URL du site web
-        url = sel.xpath("//a[@class='n1obkb mI8Pwc']/@href").get()
+        url = sel.xpath("//a[contains(@class, 'n1obkb mI8Pwc')]/@href").get()
 
         # Fermer le navigateur Selenium
         driver.quit()
@@ -102,9 +120,10 @@ class GoogleScraper(scrapy.Spider):
         yield {
             'title': final_title.strip() if final_title else None,
             'address': final_address.strip() if final_address else None,
-            'phone': phone_number.strip() if phone_number else None,  # Ajouter le numéro de téléphone au résultat
-            'url': url.strip() if url else None, # Inclure l'URL extraite dans le résultat
-            'source_url': response.url,  # URL source pour référence
-            'hours': hours,  # Ajouter les horaires d'ouverture au résultat sous la clé 'hours'
+            'phone': phone_number.strip() if phone_number else None,  
+            'url': url.strip() if url else None,  
+            'source_url': response.url,  
+            'hours': hours,  
+            'id': response.meta.get('id'),  # Récupérer l'ID passé dans les meta données de la requête
             # You can add more fields here as needed...
         }
